@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FindByMe</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <span class="brand">FindByMe</span>
+    <nav class="tabs" aria-label="Sections">
+      <button type="button" class="tab" data-view="create" aria-current="page">Create</button>
+      <button type="button" class="tab" data-view="library">Library</button>
+      <button type="button" class="tab" data-view="cast">Cast</button>
+      <button type="button" class="tab" data-view="settings">Settings</button>
+    </nav>
+    <span class="root" id="root"></span>
+  </header>
+
+  <main>
+    <p class="notice" id="notice" role="status" hidden></p>
+
+    <!-- First run: one-time setup -->
+    <section id="view-setup" class="view" hidden>
+      <h1>Set up your cast</h1>
+      <p class="lede">You do this once. Every video after this uses these characters and voices.</p>
+      <form id="setup-form">
+        <div class="field narrow">
+          <label for="setup-count">How many characters will be in your videos?</label>
+          <input id="setup-count" type="number" min="1" max="12" value="1" required>
+        </div>
+        <div id="setup-cast" class="cast-grid"></div>
+        <div class="row">
+          <div class="field">
+            <label for="setup-language">Language</label>
+            <select id="setup-language"></select>
+          </div>
+          <div class="field">
+            <label for="setup-aspect">Aspect ratio</label>
+            <select id="setup-aspect"></select>
+          </div>
+        </div>
+        <button type="submit" class="primary">Create project</button>
+      </form>
+    </section>
+
+    <section id="view-create" class="view" hidden>
+      <h1>New video</h1>
+      <form id="script-form">
+        <div class="field">
+          <label for="topic">Topic</label>
+          <textarea id="topic" rows="2" required
+            placeholder="Why kids should learn to save money early"></textarea>
+        </div>
+        <div class="row">
+          <div class="field">
+            <label for="style">Style</label>
+            <select id="style"></select>
+            <small id="style-help" class="help"></small>
+          </div>
+          <div class="field narrow">
+            <label for="seconds">Length (seconds)</label>
+            <input id="seconds" type="number" min="5" max="600" placeholder="auto">
+          </div>
+        </div>
+        <div class="field">
+          <label for="notes">Direction for the writer (optional)</label>
+          <input id="notes" type="text" placeholder="End with a joke from the youngest kid">
+        </div>
+        <button type="submit" class="primary" id="script-btn">Write script</button>
+      </form>
+
+      <div id="editor" hidden>
+        <div class="editor-head">
+          <h2 id="plan-title"></h2>
+          <span class="muted" id="plan-run"></span>
+        </div>
+        <p class="help">Edit any line before rendering. Action is what the character does with their hands and body while speaking.</p>
+        <div id="lines"></div>
+        <div class="row actions">
+          <button type="button" id="add-line">Add line</button>
+          <button type="button" class="primary" id="render-btn">Render video</button>
+        </div>
+      </div>
+
+      <div id="job" hidden>
+        <h2>Rendering</h2>
+        <div id="steps"></div>
+        <p class="error" id="job-error" hidden></p>
+      </div>
+
+      <div id="result" hidden></div>
+    </section>
+
+    <section id="view-library" class="view" hidden>
+      <h1>Library</h1>
+      <div id="runs" class="run-grid"></div>
+    </section>
+
+    <section id="view-cast" class="view" hidden>
+      <h1>Cast</h1>
+      <div id="cast-list" class="cast-grid"></div>
+      <h2>Add a character</h2>
+      <form id="add-form" class="cast-card add">
+        <div id="add-fields"></div>
+        <button type="submit">Add character</button>
+      </form>
+    </section>
+
+    <section id="view-settings" class="view" hidden>
+      <h1>Settings</h1>
+      <h2>Checks</h2>
+      <table class="checks" id="checks"></table>
+      <h2>Providers</h2>
+      <p class="help">Any provider or model can be swapped here; see docs/providers.md for every option.</p>
+      <div id="providers" class="settings-grid"></div>
+      <h2>Output</h2>
+      <div id="render-settings" class="settings-grid"></div>
+    </section>
+  </main>
+</body>
+</html>

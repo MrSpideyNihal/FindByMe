@@ -44,4 +44,6 @@ select = ["E", "F", "I", "B", "UP"]
 testpaths = ["tests"]
 
 [tool.ruff.lint.flake8-bugbear]
-extend-immutable-calls = ["typer.Argument", "typer.Option", "pathlib.Path"]
+extend-immutable-calls = [
+  "typer.Argument", "typer.Option", "pathlib.Path", "fastapi.File", "fastapi.Form",
+]

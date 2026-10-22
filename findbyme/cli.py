@@ -292,6 +292,27 @@ def make(
 
 
 @app.command()
+def ui(
+    host: str = typer.Option("127.0.0.1", help="Interface to bind."),
+    port: int = typer.Option(7860, help="Port."),
+    directory: Path = typer.Option(Path("."), "--dir", help="Project folder."),
+) -> None:
+    """Open the web UI. Runs first-time setup in the browser if there is no project yet."""
+    try:
+        import uvicorn
+
+        from .web.app import create_app
+    except ImportError:
+        _fail('the UI needs extra packages: pip install "findbyme[ui]"')
+    try:
+        root = find_root(directory)
+    except FileNotFoundError:
+        root = directory.resolve()
+    console.print(f"FindByMe UI for {root}\nOpen http://{host}:{port}")
+    uvicorn.run(create_app(root), host=host, port=port, log_level="warning")
+
+
+@app.command()
 def version() -> None:
     """Show the FindByMe version."""
     console.print(__version__)
