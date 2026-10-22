@@ -90,6 +90,13 @@ Placeholders:
 | `{duration}` | line length in seconds (stays a number) |
 | `{aspect}` | `9:16`, `16:9`, `1:1` or `4:5` |
 
+Without a video key, `auto` uses `puppet`: a flat 2D character drawn in code with the
+reference image's colours. The mouth follows the loudness of the voice, the eyes blink, the
+head bobs and tilts, and each line's `action` picks the arm and hand gestures (shrug,
+point, count on fingers, wave, lift, salute, hand on chest, and so on). Options:
+`pattern: web` for a web-patterned mask and chest emblem, `short_side` for the drawing
+resolution (default 720).
+
 Pick a model that takes an image and audio and returns a talking, moving person
 (audio-driven avatar models). Models that also accept a text prompt get better gestures:
 add `prompt: "{prompt}"` to `inputs`. Check each model's page on fal or Replicate for its

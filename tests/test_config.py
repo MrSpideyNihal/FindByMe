@@ -90,7 +90,7 @@ def test_new_projects_resolve_providers_at_run_time():
     assert resolve("llm", providers.llm, keys).provider == "openai"
     assert resolve("tts", providers.tts, keys).provider == "openai"
     assert resolve("video", providers.video, keys).provider == "fal"
-    assert resolve("video", providers.video, {}).provider == "mock"
+    assert resolve("video", providers.video, {}).provider == "puppet"
     assert resolve("llm", providers.llm, {**keys, "FINDBYME_OFFLINE": "1"}).provider == "mock"
 
 

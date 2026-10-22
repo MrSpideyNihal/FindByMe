@@ -87,10 +87,12 @@ just works. `findbyme doctor` shows what each stage will use.
 | Script | written by you or your AI agent from a brief | automatic: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` or `GEMINI_API_KEY` |
 | Voice | free Microsoft Edge voices, many languages including Hindi | `OPENAI_API_KEY` (follows voice sheets) or `ELEVENLABS_API_KEY` |
 | Captions | exact, from the voice's word timings | `OPENAI_API_KEY` adds a misread check per take |
-| Animation | reference image with a slow pan (placeholder) | talking, gesturing characters: `FAL_KEY` or `REPLICATE_API_TOKEN` |
+| Animation | a cartoon version of your character drawn in code: mouth follows the voice, eyes blink, hands act out each line | your actual reference image brought to life: `FAL_KEY` or `REPLICATE_API_TOKEN` |
 
-Characters that actually move need a video key (`FAL_KEY` or `REPLICATE_API_TOKEN`); no
-agent or free service can do that part yet. Everything else works without keys.
+Without a video key the character is redrawn in code from your reference image's colours,
+so it talks and gestures but is a simplified cartoon. For a masked hero, `findbyme set
+providers.video.options "{pattern: web}"` adds a web mask and chest emblem. To animate the
+reference image itself, add a video key.
 
 ## Commands
 

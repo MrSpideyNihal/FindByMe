@@ -21,6 +21,7 @@ from .llm import (
     OpenAICompatibleLLM,
     ScriptNeeded,
 )
+from .puppet import PuppetVideo
 from .stt import MockSTT, OpenAIWhisper
 from .tts import EdgeTTS, ElevenLabsTTS, MockTTS, OpenAITTS
 from .video import FalVideo, MockVideo, ReplicateVideo
@@ -53,6 +54,7 @@ BUILTIN: dict[str, dict[str, Factory]] = {
     "video": {
         "fal": FalVideo,
         "replicate": ReplicateVideo,
+        "puppet": PuppetVideo,
         "mock": MockVideo,
     },
 }

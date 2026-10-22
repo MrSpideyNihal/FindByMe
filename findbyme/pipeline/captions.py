@@ -90,10 +90,17 @@ def build_ass(
     for offset, words in segments:
         for g in range(0, len(words), per_group):
             group = words[g : g + per_group]
+            following = words[g + per_group].start if g + per_group < len(words) else None
             for i, word in enumerate(group):
                 start = offset + word.start
-                # hold each word until the next one starts, so captions never flicker
-                end = offset + (group[i + 1].start if i + 1 < len(group) else word.end)
+                # hold each word until the next one starts, across groups too, so the
+                # captions never blink off mid-line
+                if i + 1 < len(group):
+                    end = offset + group[i + 1].start
+                elif following is not None:
+                    end = offset + following
+                else:
+                    end = offset + word.end + 0.25
                 parts = [
                     f"{{\\c{highlight}}}{_escape(w.text)}{{\\r}}" if j == i else _escape(w.text)
                     for j, w in enumerate(group)

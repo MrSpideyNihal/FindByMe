@@ -145,7 +145,8 @@ class EdgeTTS:
 
     def __init__(self, model: str = "", options: dict[str, Any] | None = None):
         options = options or {}
-        self.rate = options.get("rate", "+0%")
+        # Edge voices default to a slow, careful pace; a little faster sounds natural.
+        self.rate = options.get("rate", "+10%")
         self.identity = make_identity("edge", model, options)
 
     def synthesize(
