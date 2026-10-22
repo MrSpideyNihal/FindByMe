@@ -129,6 +129,8 @@ class RenderConfig(BaseModel):
     fps: int = Field(30, ge=12, le=60)
     concurrency: int = Field(4, ge=1, le=32)
     gap_seconds: float = Field(0.15, ge=0, le=2)
+    voice_takes: int = Field(2, ge=1, le=5, description="extra takes only if a take misreads")
+    max_word_error: float = Field(0.15, ge=0, le=1)
     music: str | None = None
     music_volume: float = Field(0.12, ge=0, le=1)
     captions: CaptionStyle = Field(default_factory=CaptionStyle)

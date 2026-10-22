@@ -1,0 +1,11 @@
+name: skit
+description: Short comedy sketch with a setup, an escalation and a punchline.
+seconds: 40
+lines: {min: 6, max: 14}
+tone: Comic timing, exaggerated reactions, punchy lines. Clean humour.
+structure:
+  - Normal situation.
+  - Something small goes wrong.
+  - It escalates in a way that is funny but believable.
+  - Punchline with a visible reaction.
+look: Everyday location, expressive faces, big physical reactions.

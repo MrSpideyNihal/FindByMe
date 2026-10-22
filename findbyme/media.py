@@ -22,9 +22,11 @@ def require_ffmpeg() -> None:
         )
 
 
-def ffmpeg(*args: str | Path) -> None:
+def ffmpeg(*args: str | Path, cwd: Path | None = None) -> None:
     cmd = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", *map(str, args)]
-    result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
+    result = subprocess.run(
+        cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=cwd
+    )
     if result.returncode != 0:
         tail = "\n".join(result.stderr.strip().splitlines()[-8:])
         raise MediaError(f"ffmpeg failed ({result.returncode}):\n{tail}")

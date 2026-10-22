@@ -1,0 +1,11 @@
+name: kids
+description: For young viewers; simple words, big expressions, one idea per video.
+seconds: 35
+lines: {min: 5, max: 10}
+tone: Cheerful, simple and kind. Short sentences a six-year-old understands. No sarcasm.
+structure:
+  - A curious question.
+  - A simple explanation with something kids already know.
+  - A tiny fun fact.
+  - Invite the viewer to try or notice it today.
+look: Colourful, bright, friendly. Big readable gestures and facial expressions.
