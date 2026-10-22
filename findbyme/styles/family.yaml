@@ -1,0 +1,12 @@
+name: family
+description: Parents and kids talking at home; warm, funny, with a small lesson that never feels preachy.
+seconds: 45
+lines: {min: 6, max: 14}
+tone: Warm and funny. Kids sound like kids, parents sound like real parents, not narrators.
+structure:
+  - A kid asks a question or causes a small problem.
+  - A parent answers in a surprising or funny way.
+  - Another family member adds a twist.
+  - The lesson shows up through what they do, not a speech.
+  - End on a laugh or a hug-worthy line.
+look: Bright family living room or kitchen, everyday clothes, eye-level camera.

@@ -1,0 +1,12 @@
+name: educational
+description: Explains how something works with one number and one analogy; accurate and fast.
+seconds: 55
+lines: {min: 5, max: 12}
+tone: Confident, clear, a little cheeky. Short sentences. Every claim must be true.
+structure:
+  - Hook with a surprising true fact in under three seconds.
+  - "Here is how it actually works."
+  - Two to four beats, each with one number or one analogy.
+  - A twist the viewer did not expect.
+  - One-line payoff they will remember.
+look: Clean background, presenter framing, hands used to show size, steps and comparisons.

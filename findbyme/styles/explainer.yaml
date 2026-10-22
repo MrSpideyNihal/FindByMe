@@ -1,0 +1,11 @@
+name: explainer
+description: One host talking straight to camera; works for any topic and any single character.
+seconds: 45
+lines: {min: 4, max: 10}
+tone: Direct and personal, like a friend explaining something over coffee.
+structure:
+  - Hook that names the viewer's problem.
+  - The answer in plain words.
+  - One example from real life.
+  - What to do next.
+look: Host centred, chest-up, looking into the lens, natural gestures.
