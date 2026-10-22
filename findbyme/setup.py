@@ -98,7 +98,9 @@ def add_character(project: Project, member: CastMember) -> Character:
 def remove_character(project: Project, char_id: str) -> None:
     char = project.character(char_id)
     if len(project.characters) == 1:
-        raise SetupError("a project needs at least one character")
+        raise SetupError(
+            "this is the last character; use Start over (findbyme reset) to set up a new cast"
+        )
     project.characters.remove(char)
     project.save()
     shutil.rmtree(project.path(CAST_DIR) / char_id, ignore_errors=True)
@@ -129,7 +131,42 @@ def create_project(
     gitignore = root / ".gitignore"
     if not gitignore.exists():
         gitignore.write_text(".env\nruns/\n.findbyme-cache/\n", encoding="utf-8")
+    write_agent_files(root)
     return project
+
+
+AGENT_TEMPLATES = Path(__file__).parent / "agent"
+
+# Destination in the project -> template file. Agents look for different file names:
+# Claude Code reads CLAUDE.md and .claude/skills, Antigravity and Gemini CLI read
+# GEMINI.md, Codex and most others read AGENTS.md.
+AGENT_FILES = {
+    "AGENTS.md": "AGENTS.md",
+    "CLAUDE.md": "CLAUDE.md",
+    "GEMINI.md": "GEMINI.md",
+    ".claude/skills/make-video/SKILL.md": "SKILL.md",
+}
+
+
+def write_agent_files(root: Path) -> list[Path]:
+    """Teach AI agents in this folder how to make videos with FindByMe. Existing files
+    are left alone."""
+    written = []
+    for dest, template in AGENT_FILES.items():
+        target = root / dest
+        if target.exists():
+            continue
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text((AGENT_TEMPLATES / template).read_text(encoding="utf-8"), "utf-8")
+        written.append(target)
+    return written
+
+
+def reset_project(root: Path) -> None:
+    """Remove the cast and settings so setup can run again. Finished videos, the render
+    cache, .env and agent files stay."""
+    (root / CONFIG_FILE).unlink(missing_ok=True)
+    shutil.rmtree(root / CAST_DIR, ignore_errors=True)
 
 
 def read_sheet_input(value: str) -> str:

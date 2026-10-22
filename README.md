@@ -34,63 +34,81 @@ pip install "findbyme[ui] @ git+https://github.com/MrSpideyNihal/FindByMe"
 ## Quick start
 
 ```bash
-mkdir my-videos && cd my-videos
+mkdir my-videos
+cd my-videos
 findbyme init
 ```
 
-`init` asks:
+`init` opens the setup page in your browser. Nothing is pre-filled:
 
 1. How many characters will be in your videos?
-2. For each one: name, role, reference image, voice sheet (type it, point to a `.md`
-   file, or press Enter for the default).
+2. For each one: a reference image, a name, a role and a voice sheet (or leave the voice
+   sheet empty for the default).
 3. Language and aspect ratio.
 
-Then add API keys (copy `.env.example` to `.env`) and make a video:
+After that, `findbyme ui` opens the same page to make videos. Prefer the terminal?
+`findbyme init --terminal` asks the same questions there. To set up a different cast,
+use **Settings > Start over** or `findbyme reset` (your finished videos are kept).
+
+## Two ways to make a video
+
+### With your AI agent, no API key
+
+Open Claude Code, Antigravity or another coding agent in the project folder and ask:
+
+> make a family video about why kids should save a little money every week
+
+The project contains `AGENTS.md` and a Claude Code skill that tell the agent what to do:
+it starts the video with `findbyme brief`, writes the script itself from the brief (your
+cast, their voice sheets, the language, the rules), checks it with `findbyme plan`, shows
+it to you, and renders it with `findbyme render`.
+
+In the UI it works the same way: without a script key, **Write script** shows a prompt.
+Copy it into Claude, ChatGPT or Gemini, paste the reply back, and render.
+
+### With API keys, fully automatic
+
+Copy `.env.example` to `.env`, add keys, then:
 
 ```bash
 findbyme make "why kids should save a little money every week" --style family
 ```
 
-You see the script first and can render it, or stop and edit `runs/<run>/plan.json`, then:
+You see the script first and can render it, or stop and edit `runs/<run>/plan.json`, then
+`findbyme render latest`.
 
-```bash
-findbyme render latest
-```
-
-Prefer a browser?
-
-```bash
-findbyme ui
-```
-
-### What you get with and without keys
+### What each stage uses
 
 Providers are picked from the keys in `.env` every time you render, so adding a key later
 just works. `findbyme doctor` shows what each stage will use.
 
 | Stage | No key | With a key |
 | --- | --- | --- |
-| Script | fixed template (placeholder) | written for your topic: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` or `GEMINI_API_KEY` |
+| Script | written by you or your AI agent from a brief | automatic: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` or `GEMINI_API_KEY` |
 | Voice | free Microsoft Edge voices, many languages including Hindi | `OPENAI_API_KEY` (follows voice sheets) or `ELEVENLABS_API_KEY` |
 | Captions | exact, from the voice's word timings | `OPENAI_API_KEY` adds a misread check per take |
 | Animation | reference image with a slow pan (placeholder) | talking, gesturing characters: `FAL_KEY` or `REPLICATE_API_TOKEN` |
 
-For the full result (characters that talk and move), you need a script key and a video
-key. Placeholder stages are flagged in `doctor`, before every render, and in the UI.
+Characters that actually move need a video key (`FAL_KEY` or `REPLICATE_API_TOKEN`); no
+agent or free service can do that part yet. Everything else works without keys.
 
 ## Commands
 
 | Command | What it does |
 | --- | --- |
-| `findbyme init` | One-time cast, voice and language setup |
+| `findbyme init` | One-time setup in the browser (`--terminal` for prompts) |
+| `findbyme ui` | Open the app: make videos, library, cast, settings |
 | `findbyme make "topic" -s family` | Script, review, render |
+| `findbyme brief "topic" -s family` | Start a video whose script you or your agent write |
+| `findbyme plan <run> [--from reply.json]` | Check a script and save it to the run |
 | `findbyme script "topic" -s kids` | Script only, saved as `runs/<run>/plan.json` |
 | `findbyme render [run\|latest]` | Render a plan; `--no-cache` regenerates everything |
 | `findbyme cast` / `cast add` / `cast remove <id>` | Manage characters |
 | `findbyme styles` | List styles |
 | `findbyme set render.aspect 16:9` | Change any setting, validated |
 | `findbyme doctor` | Check ffmpeg, cast files and API keys |
-| `findbyme ui` | Web UI on http://127.0.0.1:7860 |
+| `findbyme reset` | Start over with a new cast (videos are kept) |
+| `findbyme agent-files` | Add AGENTS.md and the Claude Code skill to an older project |
 
 ## Styles
 

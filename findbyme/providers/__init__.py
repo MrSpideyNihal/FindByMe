@@ -13,14 +13,21 @@ from typing import Any
 
 from ..config import ProviderConfig, Providers, resolve
 from .base import LLM, STT, TTS, AnimateRequest, ProviderError, VideoGen, Word
-from .llm import OPENAI_COMPATIBLE, AnthropicLLM, MockLLM, OpenAICompatibleLLM
+from .llm import (
+    OPENAI_COMPATIBLE,
+    AnthropicLLM,
+    ManualLLM,
+    MockLLM,
+    OpenAICompatibleLLM,
+    ScriptNeeded,
+)
 from .stt import MockSTT, OpenAIWhisper
 from .tts import EdgeTTS, ElevenLabsTTS, MockTTS, OpenAITTS
 from .video import FalVideo, MockVideo, ReplicateVideo
 
 __all__ = [
     "LLM", "STT", "TTS", "VideoGen", "AnimateRequest", "ProviderError", "Word",
-    "Stack", "build", "BUILTIN",
+    "Stack", "build", "BUILTIN", "ScriptNeeded",
 ]
 
 Factory = Callable[[str, dict[str, Any]], Any]
@@ -30,6 +37,7 @@ BUILTIN: dict[str, dict[str, Factory]] = {
         **{name: (lambda m, o, n=name: OpenAICompatibleLLM(n, m, o)) for name in OPENAI_COMPATIBLE},
         "openai-compatible": lambda m, o: OpenAICompatibleLLM("openai-compatible", m, o),
         "anthropic": AnthropicLLM,
+        "manual": ManualLLM,
         "mock": MockLLM,
     },
     "tts": {

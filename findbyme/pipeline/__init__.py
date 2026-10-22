@@ -1,3 +1,3 @@
-from .runner import Pipeline, PipelineError, Progress
+from .runner import BRIEF_FILE, Pipeline, PipelineError, Progress
 
-__all__ = ["Pipeline", "PipelineError", "Progress"]
+__all__ = ["BRIEF_FILE", "Pipeline", "PipelineError", "Progress"]

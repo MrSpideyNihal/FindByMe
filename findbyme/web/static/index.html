@@ -76,6 +76,26 @@
         <button type="submit" class="primary" id="script-btn">Write script</button>
       </form>
 
+      <div id="brief" hidden>
+        <h2>Write the script with any AI, no API key</h2>
+        <p class="help">
+          There is no script API key, so you choose who writes it. Either ask your coding
+          agent (Claude Code, Antigravity) in this project folder to
+          "write the script for <code id="brief-run"></code> and render it", or copy the prompt below
+          into Claude, ChatGPT or Gemini and paste the reply back here.
+        </p>
+        <div class="field">
+          <label for="brief-text">Prompt</label>
+          <textarea id="brief-text" rows="8" readonly></textarea>
+        </div>
+        <button type="button" id="brief-copy">Copy prompt</button>
+        <div class="field reply">
+          <label for="brief-reply">The assistant's reply</label>
+          <textarea id="brief-reply" rows="8" placeholder="Paste the JSON reply here"></textarea>
+        </div>
+        <button type="button" class="primary" id="brief-use">Use this script</button>
+      </div>
+
       <div id="editor" hidden>
         <div class="editor-head">
           <h2 id="plan-title"></h2>
@@ -122,6 +142,9 @@
       <div id="providers" class="settings-grid"></div>
       <h2>Output</h2>
       <div id="render-settings" class="settings-grid"></div>
+      <h2>Start over</h2>
+      <p class="help">Removes the cast and settings and opens setup again. Finished videos stay in the runs folder.</p>
+      <button type="button" class="danger" id="reset-btn">Start over</button>
     </section>
   </main>
 </body>

@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import pytest
@@ -11,16 +12,6 @@ from .conftest import needs_ffmpeg
 
 runner = CliRunner()
 
-PROVIDER_KEYS = (
-    "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY", "ELEVENLABS_API_KEY",
-    "FAL_KEY", "REPLICATE_API_TOKEN",
-)
-
-
-@pytest.fixture(autouse=True)
-def offline(monkeypatch):
-    for key in PROVIDER_KEYS:
-        monkeypatch.delenv(key, raising=False)
 
 
 @pytest.fixture
@@ -86,7 +77,7 @@ def test_init_wizard(workdir, portrait):
         "Aarav", "son", str(portrait), "",
         "hinglish", "9:16",
     ]) + "\n"
-    result = runner.invoke(app, ["init"], input=answers)
+    result = runner.invoke(app, ["init", "--terminal"], input=answers)
     assert result.exit_code == 0, result.output
     project = Project.load(workdir)
     assert [c.name for c in project.characters] == ["Priya", "Aarav"]
@@ -122,3 +113,63 @@ def test_make_end_to_end(workdir, portrait):
 
     again = runner.invoke(app, ["render", "latest"])
     assert again.exit_code == 0, again.output
+
+
+def test_project_gets_agent_files(tmp_path, portrait):
+    create_project(tmp_path / "p", [CastMember("A", portrait)])
+    root = tmp_path / "p"
+    for name in ("AGENTS.md", "CLAUDE.md", "GEMINI.md", ".claude/skills/make-video/SKILL.md"):
+        assert (root / name).is_file(), name
+    assert "findbyme brief" in (root / "AGENTS.md").read_text()
+
+
+def test_init_refuses_existing_project(workdir, portrait):
+    create_project(workdir, [CastMember("A", portrait)])
+    result = runner.invoke(app, ["init", "--terminal"])
+    assert result.exit_code == 1
+    assert "already set up" in result.output
+
+
+def test_reset_clears_cast_but_keeps_runs(workdir, portrait):
+    create_project(workdir, [CastMember("A", portrait)])
+    (workdir / "runs" / "old").mkdir(parents=True)
+    result = runner.invoke(app, ["reset", "--yes"])
+    assert result.exit_code == 0, result.output
+    assert not (workdir / "findbyme.yaml").exists()
+    assert not (workdir / "cast").exists()
+    assert (workdir / "runs" / "old").exists()
+
+
+@needs_ffmpeg
+def test_agent_writes_script_without_a_key(workdir, portrait):
+    create_project(workdir, [CastMember("Host", portrait)])
+    set_option(Project.load(workdir), "providers.llm.provider", "manual")
+    set_option(Project.load(workdir), "render.short_side", "360")
+
+    made = runner.invoke(app, ["make", "tides", "--style", "explainer"])
+    assert made.exit_code == 0, made.output
+    assert "No script API key" in made.output
+    run_dir = next((workdir / "runs").iterdir())
+    brief = (run_dir / "brief.md").read_text(encoding="utf-8")
+    assert '"id": "host"' in brief and "JSON" in brief
+
+    not_yet = runner.invoke(app, ["render", run_dir.name])
+    assert not_yet.exit_code == 1
+    assert "no script yet" in not_yet.output
+
+    bad = run_dir / "plan.json"
+    bad.write_text('{"title": "Tides", "lines": [{"speaker": "ghost", "text": "Hi"}]}')
+    assert runner.invoke(app, ["plan", run_dir.name]).exit_code == 1
+
+    bad.write_text(
+        "```json\n"
+        '{"title": "Tides", "lines": [{"speaker": "host", "text": "The moon pulls the sea.",'
+        ' "action": "raises one hand slowly"}]}\n```'
+    )
+    checked = runner.invoke(app, ["plan", run_dir.name])
+    assert checked.exit_code == 0, checked.output
+    assert json.loads(bad.read_text())["topic"] == "tides"
+
+    rendered = runner.invoke(app, ["render", run_dir.name])
+    assert rendered.exit_code == 0, rendered.output
+    assert (run_dir / "final.mp4").exists()

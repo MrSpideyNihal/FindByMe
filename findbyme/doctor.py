@@ -63,6 +63,13 @@ def run(project: Project) -> list[Check]:
         except ProviderError as exc:
             checks.append(Check(False, label, str(exc)))
             continue
+        if cfg.provider == "manual":
+            checks.append(Check(
+                True, label,
+                "no key: you or your AI agent write the script from a brief "
+                f"(findbyme brief). For automatic scripts add {UNLOCKS['llm']} to .env",
+            ))
+            continue
         if cfg.provider == "mock":
             if kind == "stt" and resolve("tts", project.providers.tts).provider == "edge":
                 checks.append(Check(True, label, "not needed: edge voices give word timings"))

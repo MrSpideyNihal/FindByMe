@@ -182,3 +182,8 @@ button:disabled { opacity: 0.55; cursor: progress; }
 .checks .bad { color: var(--danger); font-weight: 600; }
 
 .settings-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 0 16px; }
+
+#brief { margin-top: 32px; }
+#brief textarea { font: 13px/1.45 ui-monospace, Consolas, monospace; }
+#brief .reply { margin-top: 20px; }
+code { font: 13px ui-monospace, Consolas, monospace; background: var(--bg); padding: 1px 4px; border-radius: 3px; }

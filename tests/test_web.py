@@ -11,13 +11,6 @@ from findbyme.web.app import create_app  # noqa: E402
 from .conftest import needs_ffmpeg  # noqa: E402
 
 
-@pytest.fixture(autouse=True)
-def offline(monkeypatch):
-    for key in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY", "ELEVENLABS_API_KEY",
-                "FAL_KEY", "REPLICATE_API_TOKEN"):
-        monkeypatch.delenv(key, raising=False)
-
-
 @pytest.fixture
 def client(tmp_path):
     return TestClient(create_app(tmp_path / "proj"))
@@ -109,3 +102,25 @@ def test_render_job(client, portrait):
     assert job["status"] == "done", job["error"]
     assert client.get(job["result"]["video"]).status_code == 200
     assert client.get("/api/runs").json()[0]["video"]
+
+
+def test_script_without_key_returns_brief_and_accepts_reply(client, portrait):
+    setup_project(client, portrait)
+    client.post("/api/settings", json={"key": "providers.llm.provider", "value": "manual"})
+    run = client.post("/api/script", json={"topic": "chai", "style": "couple"}).json()
+    assert run["plan"] is None and "priya" in run["brief"]
+    assert client.get("/api/runs").json()[0]["needs_script"] is True
+
+    bad = client.post(f"/api/runs/{run['run']}/reply", json={"text": "sorry, I can't"})
+    assert bad.status_code == 400
+
+    reply = '{"title": "Chai", "lines": [{"speaker": "aarav", "text": "One more cup?"}]}'
+    good = client.post(f"/api/runs/{run['run']}/reply", json={"text": reply})
+    assert good.status_code == 200, good.text
+    assert good.json()["plan"]["lines"][0]["speaker"] == "aarav"
+
+
+def test_reset_returns_to_setup(client, portrait):
+    setup_project(client, portrait)
+    assert client.post("/api/reset").json()["project"] is None
+    assert setup_project(client, portrait).status_code == 200

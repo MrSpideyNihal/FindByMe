@@ -2,20 +2,24 @@
 
 from __future__ import annotations
 
+import threading
+import webbrowser
 from pathlib import Path
 from typing import NoReturn
 
 import typer
 from dotenv import load_dotenv
+from pydantic import ValidationError
 from rich.console import Console
 from rich.progress import BarColumn, Progress, TaskID, TextColumn, TimeElapsedColumn
 from rich.table import Table
 
 from . import __version__, doctor, styles
-from .config import ASPECTS, LANGUAGES, RUNS_DIR, Project, find_root
-from .pipeline import Pipeline, PipelineError
+from .config import ASPECTS, CONFIG_FILE, LANGUAGES, RUNS_DIR, Project, find_root
+from .pipeline import BRIEF_FILE, Pipeline, PipelineError
 from .pipeline import Progress as Step
-from .plan import Plan
+from .pipeline.runner import BRIEF_META
+from .plan import PLAN_FILE, Plan
 from .providers import ProviderError, Stack
 from .setup import (
     CastMember,
@@ -24,7 +28,9 @@ from .setup import (
     create_project,
     read_sheet_input,
     remove_character,
+    reset_project,
     set_option,
+    write_agent_files,
 )
 
 app = typer.Typer(
@@ -84,8 +90,19 @@ def _ask_member(number: int) -> CastMember:
 @app.command()
 def init(
     directory: Path = typer.Argument(Path("."), help="Where to create the project."),
+    terminal: bool = typer.Option(False, "--terminal", help="Answer the questions here instead."),
+    port: int = typer.Option(7860, help="Port for the setup page."),
 ) -> None:
-    """One-time setup: your characters, their voices and the language."""
+    """One-time setup: opens the setup page in your browser (or --terminal)."""
+    if (directory / CONFIG_FILE).exists():
+        _fail(
+            f"{directory.resolve()} is already set up. Open it with `findbyme ui`, "
+            "or start over with `findbyme reset`."
+        )
+    if not terminal:
+        _serve(directory.resolve(), "127.0.0.1", port, open_browser=True)
+        return
+
     answer = typer.prompt("How many characters will be in your videos?", default="1")
     # PowerShell pipes start with a byte-order mark; strip it so "1" reads as 1.
     answer = answer.lstrip(BOM).strip()
@@ -108,9 +125,24 @@ def init(
     console.print(f"\n[green]Project ready:[/green] {project.root}")
     _print_doctor(project)
     console.print(
-        "\nNext: copy .env.example to .env and add your keys, then\n"
-        '  findbyme make "your topic" --style family'
+        '\nNext: findbyme make "your topic" --style family\n'
+        "No API keys? Ask Claude Code or Antigravity in this folder to make a video; "
+        "they write the script and FindByMe renders it."
     )
+
+
+@app.command()
+def reset(
+    yes: bool = typer.Option(False, "--yes", "-y", help="Do not ask for confirmation."),
+) -> None:
+    """Start over: remove the cast and settings (finished videos in runs/ are kept)."""
+    project = _project()
+    if not yes and not typer.confirm(
+        f"Delete the cast and settings in {project.root}? Videos in runs/ stay.", default=False
+    ):
+        raise typer.Exit(0)
+    reset_project(project.root)
+    console.print("Project cleared. Run `findbyme init` to set it up again.")
 
 
 @cast_app.callback(invoke_without_command=True)
@@ -244,18 +276,79 @@ def _warn_placeholders(stack: Stack) -> None:
     )
 
 
+def _is_run(path: Path) -> bool:
+    return (path / PLAN_FILE).exists() or (path / BRIEF_FILE).exists()
+
+
 def _resolve_run(project: Project, run: str) -> Path:
     runs = project.path(RUNS_DIR)
     if run == "latest":
-        candidates = sorted(p for p in runs.glob("*") if (p / "plan.json").exists())
+        candidates = sorted(p for p in runs.glob("*") if _is_run(p))
         if not candidates:
             _fail("no runs yet")
         return candidates[-1]
-    path = Path(run)
-    for candidate in (path, runs / run):
-        if (candidate / "plan.json").exists():
+    for candidate in (Path(run), runs / run):
+        if _is_run(candidate):
             return candidate.resolve()
-    _fail(f"no plan.json in {run}")
+    _fail(f"no run named {run}")
+
+
+def _print_brief_help(run_dir: Path) -> None:
+    console.print(
+        f"\n[yellow]No script API key, so the script is written outside FindByMe.[/yellow]\n"
+        f"Brief: {run_dir / BRIEF_FILE}\n\n"
+        "Either:\n"
+        "  - ask your coding agent (Claude Code, Antigravity, ...) in this folder:\n"
+        f'      "write the script for {run_dir.name} and render it"\n'
+        "  - or paste the brief into Claude, ChatGPT or Gemini, save the JSON reply, and run:\n"
+        f"      findbyme plan {run_dir.name} --from reply.json\n"
+        f"Then: findbyme render {run_dir.name}"
+    )
+
+
+@app.command()
+def brief(
+    topic: str = typer.Argument(..., help="What the video is about."),
+    style: str = typer.Option("explainer", "--style", "-s"),
+    notes: str = typer.Option("", "--notes", "-n", help="Extra direction for the writer."),
+    seconds: int = typer.Option(0, "--seconds", help="Target length; 0 uses the style default."),
+) -> None:
+    """Start a video whose script you or your AI agent write (no API key needed)."""
+    project = _project()
+    try:
+        run_dir = Pipeline(project).brief(topic, style, notes, seconds or None)
+    except KeyError as exc:
+        _fail(str(exc))
+    console.print(f"Run: {run_dir.name}")
+    _print_brief_help(run_dir)
+
+
+@app.command("plan")
+def plan_cmd(
+    run: str = typer.Argument("latest", help="Run folder, its name, or `latest`."),
+    source: Path = typer.Option(
+        None, "--from", help="File with the script JSON; default is the run's plan.json."
+    ),
+) -> None:
+    """Check a script against the cast and schema, and save it as the run's plan."""
+    project = _project()
+    run_dir = _resolve_run(project, run)
+    path = source or run_dir / PLAN_FILE
+    if not path.is_file():
+        _fail(f"{path} not found; write the script JSON there first")
+    pipeline = Pipeline(project)
+    raw = path.read_text(encoding="utf-8").lstrip(BOM)
+    try:
+        if (run_dir / BRIEF_META).exists():
+            plan = pipeline.accept(run_dir, raw)
+        else:
+            plan = Plan.model_validate_json(raw)
+            plan.check_cast(project)
+            plan.save(run_dir)
+    except (ValueError, ValidationError) as exc:
+        _fail(f"the script is not valid yet:\n{exc}")
+    _print_plan(plan, project)
+    console.print(f"\nScript OK. Render it: findbyme render {run_dir.name}")
 
 
 @app.command()
@@ -271,8 +364,11 @@ def script(
         run_dir, plan = Pipeline(project).write(topic, style, notes, seconds or None)
     except (ProviderError, KeyError) as exc:
         _fail(str(exc))
+    if plan is None:
+        _print_brief_help(run_dir)
+        return
     _print_plan(plan, project)
-    console.print(f"\nScript saved: {run_dir / 'plan.json'}\nRender it: findbyme render latest")
+    console.print(f"\nScript saved: {run_dir / PLAN_FILE}\nRender it: findbyme render latest")
 
 
 @app.command()
@@ -311,6 +407,9 @@ def make(
         run_dir, plan = Pipeline(project).write(topic, style, notes, seconds or None)
     except (ProviderError, KeyError) as exc:
         _fail(str(exc))
+    if plan is None:
+        _print_brief_help(run_dir)
+        return
     _print_plan(plan, project)
     if not yes and not typer.confirm("Render this script?", default=True):
         console.print(f"Kept the script for editing: {run_dir / 'plan.json'}")
@@ -318,25 +417,43 @@ def make(
     render(str(run_dir), no_cache=False)
 
 
-@app.command()
-def ui(
-    host: str = typer.Option("127.0.0.1", help="Interface to bind."),
-    port: int = typer.Option(7860, help="Port."),
-    directory: Path = typer.Option(Path("."), "--dir", help="Project folder."),
-) -> None:
-    """Open the web UI. Runs first-time setup in the browser if there is no project yet."""
+def _serve(root: Path, host: str, port: int, open_browser: bool) -> None:
     try:
         import uvicorn
 
         from .web.app import create_app
     except ImportError:
         _fail('the UI needs extra packages: pip install "findbyme[ui]"')
+    url = f"http://{host}:{port}"
+    console.print(f"FindByMe for {root}\nOpen {url}  (Ctrl+C to stop)")
+    if open_browser:
+        threading.Timer(1.0, webbrowser.open, args=(url,)).start()
+    uvicorn.run(create_app(root), host=host, port=port, log_level="warning")
+
+
+@app.command()
+def ui(
+    host: str = typer.Option("127.0.0.1", help="Interface to bind."),
+    port: int = typer.Option(7860, help="Port."),
+    directory: Path = typer.Option(Path("."), "--dir", help="Project folder."),
+    no_browser: bool = typer.Option(False, "--no-browser", help="Do not open a browser tab."),
+) -> None:
+    """Open the web UI. Runs first-time setup in the browser if there is no project yet."""
     try:
         root = find_root(directory)
     except FileNotFoundError:
         root = directory.resolve()
-    console.print(f"FindByMe UI for {root}\nOpen http://{host}:{port}")
-    uvicorn.run(create_app(root), host=host, port=port, log_level="warning")
+    _serve(root, host, port, open_browser=not no_browser)
+
+
+@app.command("agent-files")
+def agent_files() -> None:
+    """Add AGENTS.md and a Claude Code skill so AI agents can make videos here."""
+    written = write_agent_files(_project().root)
+    for path in written:
+        console.print(f"wrote {path}")
+    if not written:
+        console.print("Agent files already exist.")
 
 
 @app.command()

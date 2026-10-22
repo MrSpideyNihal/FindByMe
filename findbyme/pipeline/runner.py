@@ -1,6 +1,7 @@
 """Runs the stages and keeps every artifact of a video in one run folder.
 
     runs/20261022-153000-why-the-sky-is-blue/
+      brief.md       the writer's prompt (when you or your agent write the script)
       plan.json      the script (edit it and re-render)
       audio/         chosen voice take per line
       shots/         animated shot per line
@@ -27,12 +28,15 @@ from pathlib import Path
 from .. import __version__, media, styles
 from ..cache import Cache
 from ..config import CACHE_DIR, RUNS_DIR, Project, slugify
-from ..plan import Plan
-from ..providers import Stack
+from ..plan import PLAN_FILE, Plan
+from ..providers import ScriptNeeded, Stack
 from . import captions, compose
-from .script import write_script
+from .script import brief_document, parse_reply, write_script
 from .shots import animate_line
 from .voice import LineAudio, voice_line
+
+BRIEF_FILE = "brief.md"
+BRIEF_META = "brief.json"
 
 
 class PipelineError(RuntimeError):
@@ -77,12 +81,38 @@ class Pipeline:
         run_dir.mkdir(parents=True, exist_ok=False)
         return run_dir
 
+    def brief(
+        self, topic: str, style: str, notes: str = "", seconds: int | None = None
+    ) -> Path:
+        """Start a run whose script is written outside FindByMe (by you or your agent)."""
+        chosen = styles.load(style, self.project.root)
+        run_dir = self.new_run_dir(topic)
+        (run_dir / BRIEF_FILE).write_text(
+            brief_document(self.project, chosen, topic, notes, seconds), encoding="utf-8"
+        )
+        (run_dir / BRIEF_META).write_text(
+            json.dumps({"topic": topic, "style": chosen.name}, ensure_ascii=False), "utf-8"
+        )
+        return run_dir
+
+    def accept(self, run_dir: Path, reply: str) -> Plan:
+        """Validate a script written from the brief and save it as the run's plan."""
+        meta = json.loads((run_dir / BRIEF_META).read_text(encoding="utf-8"))
+        plan = parse_reply(self.project, meta["style"], meta["topic"], reply)
+        plan.save(run_dir)
+        return plan
+
     def write(
         self, topic: str, style: str, notes: str = "", seconds: int | None = None
-    ) -> tuple[Path, Plan]:
+    ) -> tuple[Path, Plan | None]:
+        """Write the script with the configured model. Without one, start a brief run
+        and return ``None`` for the plan."""
         chosen = styles.load(style, self.project.root)
         self._notify(Progress("script", 0, 1, f"writing a {chosen.name} script"))
-        plan = write_script(self.project, self.stack.llm, chosen, topic, notes, seconds)
+        try:
+            plan = write_script(self.project, self.stack.llm, chosen, topic, notes, seconds)
+        except ScriptNeeded:
+            return self.brief(topic, style, notes, seconds), None
         run_dir = self.new_run_dir(topic)
         plan.save(run_dir)
         self._notify(Progress("script", 1, 1, f"{len(plan.lines)} lines"))
@@ -91,6 +121,10 @@ class Pipeline:
     def render(self, run_dir: Path) -> Path:
         media.require_ffmpeg()
         started = time.monotonic()
+        if not (run_dir / PLAN_FILE).exists():
+            raise PipelineError(
+                f"{run_dir.name} has no script yet. Write it from {BRIEF_FILE} into {PLAN_FILE}"
+            )
         plan = Plan.load(run_dir)
         plan.check_cast(self.project)
         style = self._style(plan.style)
@@ -130,7 +164,9 @@ class Pipeline:
         return final
 
     def make(self, topic: str, style: str, notes: str = "", seconds: int | None = None) -> Path:
-        run_dir, _ = self.write(topic, style, notes, seconds)
+        run_dir, plan = self.write(topic, style, notes, seconds)
+        if plan is None:
+            raise PipelineError(f"no script model; write the script from {run_dir / BRIEF_FILE}")
         return self.render(run_dir)
 
     def _style(self, name: str) -> styles.Style:

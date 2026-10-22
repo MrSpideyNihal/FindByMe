@@ -278,6 +278,8 @@ def detect(kind: str, env: dict[str, str] | None = None) -> ProviderConfig:
             return ProviderConfig(provider="gemini", model="gemini-2.5-flash")
         if has["OPENROUTER_API_KEY"]:
             return ProviderConfig(provider="openrouter", model="openai/gpt-4.1")
+        # No key: you or your AI agent write the script from a brief.
+        return ProviderConfig(provider="manual")
     elif kind == "tts":
         if has["ELEVENLABS_API_KEY"]:
             return ProviderConfig(provider="elevenlabs", model="eleven_multilingual_v2")
