@@ -105,9 +105,9 @@ class MockLLM:
         cast = brief["cast"]
         topic = brief["topic"]
         beats = [
-            f"Okay, quick question about {topic}.",
+            f"Okay, quick question: {topic}?",
             "Wait, I always wondered about that.",
-            f"So here is the simple version of {topic}.",
+            "So here is the simple version.",
             "That actually makes a lot of sense.",
             "And the best part is you can try it today.",
             "Let's do it together then.",
