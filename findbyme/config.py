@@ -261,8 +261,9 @@ def _edge_available() -> bool:
 def detect(kind: str, env: dict[str, str] | None = None) -> ProviderConfig:
     """The best provider for one stage given the API keys in ``env``.
 
-    Falls back to offline mocks, except for voice, which uses free Edge voices when no
-    voice key is set. ``FINDBYME_OFFLINE=1`` forces mocks everywhere (tests, demos).
+    Without keys: the script is written by you or your agent (manual), voice uses free
+    Edge voices, and video uses the code-drawn puppet. Mocks are the last resort.
+    ``FINDBYME_OFFLINE=1`` forces mocks everywhere (tests, demos).
     """
     env = dict(os.environ) if env is None else env
     if env.get(OFFLINE_ENV):
@@ -306,6 +307,8 @@ def detect(kind: str, env: dict[str, str] | None = None) -> ProviderConfig:
                 model="bytedance/omni-human",
                 options={"inputs": {"image": "{image}", "audio": "{audio}"}, "output": ""},
             )
+        # No key: a character drawn in code that talks and gestures.
+        return ProviderConfig(provider="puppet")
     return ProviderConfig(provider="mock")
 
 

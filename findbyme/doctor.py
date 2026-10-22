@@ -70,6 +70,13 @@ def run(project: Project) -> list[Check]:
                 f"(findbyme brief). For automatic scripts add {UNLOCKS['llm']} to .env",
             ))
             continue
+        if cfg.provider == "puppet":
+            checks.append(Check(
+                True, label,
+                "no key: a cartoon version of your character, drawn in code, talks and "
+                f"gestures. To animate your actual image add {UNLOCKS['video']} to .env",
+            ))
+            continue
         if cfg.provider == "mock":
             if kind == "stt" and resolve("tts", project.providers.tts).provider == "edge":
                 checks.append(Check(True, label, "not needed: edge voices give word timings"))

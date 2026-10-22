@@ -12,7 +12,9 @@ from ..plan import Plan, schema_hint
 from ..providers import LLM, ProviderError
 from ..styles import Style
 
-WORDS_PER_SECOND = 2.6
+# Measured on the voices FindByMe uses: Hindi and Hinglish Edge voices read about 1.9
+# words a second, OpenAI English voices about 2.4. Scripts slightly short beat too long.
+WORDS_PER_SECOND = 2.0
 
 SYSTEM = """\
 You write scripts for short, character-driven videos that are animated from reference
@@ -55,6 +57,8 @@ def build_prompt(
     }
     parts = [
         f"Write a {seconds}-second {style.name} video about: {topic}",
+        f"Length matters: about {round(seconds * WORDS_PER_SECOND)} spoken words in total. "
+        "The voice reads roughly two words a second; do not go over.",
         f"Language for every spoken line: {language_name(project.language)}.",
         f"Tone: {style.tone}" if style.tone else "",
         "Structure:\n" + "\n".join(f"- {step}" for step in style.structure)

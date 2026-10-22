@@ -55,6 +55,8 @@ def animate_line(
                 duration=audio.duration,
                 size=settings.size,
                 aspect=settings.aspect,
+                action=line.action,
+                emotion=line.emotion,
             ),
             partial,
         )

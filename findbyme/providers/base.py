@@ -33,6 +33,8 @@ class AnimateRequest:
     duration: float
     size: tuple[int, int]
     aspect: str
+    action: str = ""
+    emotion: str = ""
 
 
 @runtime_checkable
