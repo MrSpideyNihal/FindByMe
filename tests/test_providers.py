@@ -134,3 +134,17 @@ def test_mock_media_providers(tmp_path, portrait):
         AnimateRequest(portrait, audio, "", seconds, (360, 640), "9:16"), tmp_path / "v.mp4"
     )
     assert media.duration(clip) == pytest.approx(seconds, abs=0.1)
+
+
+def test_edge_voice_mapping():
+    from findbyme.providers.tts import edge_voice
+
+    assert edge_voice("coral", "hi") == "hi-IN-SwaraNeural"
+    assert edge_voice("ash", "hinglish") == "hi-IN-MadhurNeural"
+    assert edge_voice("en-GB-RyanNeural", "hi") == "en-GB-RyanNeural"
+    assert edge_voice("coral", "klingon").startswith("en-US-")
+
+
+def test_stack_reports_placeholders():
+    stack = Stack(default_providers())
+    assert set(stack.placeholders()) == {"llm", "tts", "stt", "video"}

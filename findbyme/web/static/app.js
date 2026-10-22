@@ -177,6 +177,13 @@ function renderCreateForm() {
   };
   select.onchange = describe;
   describe();
+
+  const placeholders = (app.data.doctor || []).filter((c) => c.warn);
+  if (placeholders.length) {
+    notify(`No API key for: ${placeholders.map((c) => c.name.split(":")[0]).join(", ")}. `
+      + "Those parts of the video will be placeholders. Add keys to .env in the project "
+      + "folder and restart, or see Settings for details.", true);
+  }
 }
 
 $("#script-form").addEventListener("submit", async (event) => {
@@ -411,7 +418,7 @@ function settingField(key, label, value, kind = "text", choices = null) {
 
 function renderChecks() {
   $("#checks").replaceChildren(...(app.data.doctor || []).map((c) => h("tr", {},
-    h("td", { class: c.ok ? "ok" : "bad" }, c.ok ? "ok" : "fix"),
+    h("td", { class: c.ok && !c.warn ? "ok" : "bad" }, c.ok ? (c.warn ? "placeholder" : "ok") : "fix"),
     h("td", {}, c.name),
     h("td", { class: "muted" }, c.detail))));
 }
@@ -447,6 +454,20 @@ for (const tab of document.querySelectorAll(".tab")) {
   tab.addEventListener("click", () => show(tab.dataset.view));
 }
 
+function hideBoot() {
+  const boot = $("#boot");
+  if (boot) boot.hidden = true;
+}
+
 refresh()
-  .then(() => { if (app.data.project) show("create"); })
-  .catch((error) => notify(error.message, true));
+  .then(() => {
+    hideBoot();
+    if (app.data.project) show("create");
+  })
+  .catch((error) => {
+    // Keep the "not running" hint visible when the server cannot be reached at all.
+    if (!(error instanceof TypeError)) {
+      hideBoot();
+      notify(error.message, true);
+    }
+  });
