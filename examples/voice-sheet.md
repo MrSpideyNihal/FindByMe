@@ -1,0 +1,5 @@
+Who: (age, role, where they are from)
+Pace and energy: (slow and calm / fast and cheeky / ...)
+Language mix: (for example: Hindi for feelings, English for technical words)
+Phrases they use: ("accha, suno", "wait wait wait", ...)
+Never: (shouts / uses slang / ...)
