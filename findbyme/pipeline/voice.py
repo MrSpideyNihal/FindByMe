@@ -12,6 +12,7 @@ from ..cache import Cache, key, place
 from ..config import Character, Project, stt_language
 from ..plan import Line
 from ..providers import STT, TTS, Word
+from ..providers.tts import words_sidecar
 
 _TOKEN_RE = re.compile(r"\w+", re.UNICODE)
 
@@ -91,7 +92,13 @@ def voice_line(
             )
             media.to_wav(raw, wav)
             raw.unlink(missing_ok=True)
-            words = stt.transcribe(wav, language=lang, hint=line.text)
+            spoken = words_sidecar(raw)
+            if spoken.exists() and stt.identity.startswith("mock"):
+                # The voice provider reported its own word timings; better than a guess.
+                words = _load_words(spoken)
+            else:
+                words = stt.transcribe(wav, language=lang, hint=line.text)
+            spoken.unlink(missing_ok=True)
             _words_path(wav).write_text(
                 json.dumps([w.__dict__ for w in words], ensure_ascii=False), "utf-8"
             )

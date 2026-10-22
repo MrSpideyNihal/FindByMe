@@ -10,8 +10,14 @@ providers:
   video: {provider: fal, model: fal-ai/bytedance/omnihuman, options: {...}}
 ```
 
-Change one with `findbyme set providers.llm.provider gemini` or in the Settings page of
-the UI. Run `findbyme doctor` afterwards; it reports missing keys before you render.
+New projects use `provider: auto` for every stage: the provider is chosen from the keys
+present when you render (see the order below), so adding a key to `.env` later is enough.
+Set a provider by name to pin it, for example `findbyme set providers.llm.provider gemini`
+or in the Settings page of the UI. With `auto`, a `model` or `options` you set still apply.
+
+`auto` order: script uses Anthropic, then OpenAI, Gemini, OpenRouter; voice uses
+ElevenLabs, then OpenAI, then free Edge voices; timing uses OpenAI; video uses fal, then
+Replicate. A stage with nothing available falls back to an offline placeholder. Run `findbyme doctor` afterwards; it reports missing keys before you render.
 
 ## Script writer (`llm`)
 
@@ -38,6 +44,10 @@ and retry loop in `findbyme/pipeline/script.py` keeps them consistent between mo
 | --- | --- | --- |
 | `openai` | `OPENAI_API_KEY` | an OpenAI voice name: `coral`, `ash`, `sage`, `verse`, `ballad`, `echo`, `shimmer`, `alloy`, ... |
 | `elevenlabs` | `ELEVENLABS_API_KEY` | an ElevenLabs voice id |
+| `edge` | none | an Edge voice name such as `hi-IN-MadhurNeural` (`edge-tts --list-voices`); otherwise one is picked for the language |
+
+Edge voices are free and need no key, but ignore voice sheets and emotions. They report
+their own word timings, so captions are exact without a transcription key.
 
 With `gpt-*` speech models the character's voice sheet and the line's emotion are sent as
 voice direction. ElevenLabs options: `voice_settings` (stability, similarity_boost, ...).

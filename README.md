@@ -63,9 +63,20 @@ Prefer a browser?
 findbyme ui
 ```
 
-Without any API keys every stage runs on offline mocks, so you can try the whole flow
-(and the tests run) before spending anything. Mock output is a placeholder: a tone for
-the voice and a slow pan over the reference image.
+### What you get with and without keys
+
+Providers are picked from the keys in `.env` every time you render, so adding a key later
+just works. `findbyme doctor` shows what each stage will use.
+
+| Stage | No key | With a key |
+| --- | --- | --- |
+| Script | fixed template (placeholder) | written for your topic: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` or `GEMINI_API_KEY` |
+| Voice | free Microsoft Edge voices, many languages including Hindi | `OPENAI_API_KEY` (follows voice sheets) or `ELEVENLABS_API_KEY` |
+| Captions | exact, from the voice's word timings | `OPENAI_API_KEY` adds a misread check per take |
+| Animation | reference image with a slow pan (placeholder) | talking, gesturing characters: `FAL_KEY` or `REPLICATE_API_TOKEN` |
+
+For the full result (characters that talk and move), you need a script key and a video
+key. Placeholder stages are flagged in `doctor`, before every render, and in the UI.
 
 ## Commands
 

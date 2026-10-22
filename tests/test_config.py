@@ -1,15 +1,19 @@
 from pathlib import Path
 
 import pytest
+import yaml
 from pydantic import ValidationError
 
 from findbyme.config import (
     CONFIG_FILE,
     Character,
     Project,
+    ProviderConfig,
     RenderConfig,
     default_providers,
+    detect,
     find_root,
+    resolve,
     slugify,
     stt_language,
 )
@@ -78,14 +82,47 @@ def test_render_size(aspect, expected):
     assert RenderConfig(aspect=aspect).size == expected
 
 
-def test_default_providers_follow_keys():
-    offline = default_providers({})
-    assert {p["provider"] for p in offline.model_dump().values()} == {"mock"}
+def test_new_projects_resolve_providers_at_run_time():
+    providers = default_providers()
+    assert {p["provider"] for p in providers.model_dump().values()} == {"auto"}
 
-    online = default_providers({"OPENAI_API_KEY": "x", "FAL_KEY": "y"})
-    assert online.llm.provider == "openai"
-    assert online.tts.provider == "openai"
-    assert online.video.provider == "fal"
+    keys = {"OPENAI_API_KEY": "x", "FAL_KEY": "y"}
+    assert resolve("llm", providers.llm, keys).provider == "openai"
+    assert resolve("tts", providers.tts, keys).provider == "openai"
+    assert resolve("video", providers.video, keys).provider == "fal"
+    assert resolve("video", providers.video, {}).provider == "mock"
+    assert resolve("llm", providers.llm, {**keys, "FINDBYME_OFFLINE": "1"}).provider == "mock"
+
+
+def test_auto_keeps_user_model_and_options():
+    cfg = ProviderConfig(provider="auto", model="gpt-5", options={"temperature": 0.1})
+    out = resolve("llm", cfg, {"OPENAI_API_KEY": "x"})
+    assert (out.provider, out.model, out.options) == ("openai", "gpt-5", {"temperature": 0.1})
+
+
+def test_tts_falls_back_to_free_edge_voices():
+    assert detect("tts", {}).provider == "edge"
+
+
+def test_v1_all_mock_project_migrates_to_auto(tmp_path):
+    project = make_project(tmp_path)
+    project.save()
+    data = yaml.safe_load((tmp_path / CONFIG_FILE).read_text())
+    data["version"] = 1
+    for entry in data["providers"].values():
+        entry["provider"] = "mock"
+    (tmp_path / CONFIG_FILE).write_text(yaml.safe_dump(data))
+
+    loaded = Project.load(tmp_path)
+    assert loaded.providers.llm.provider == "auto"
+    assert yaml.safe_load((tmp_path / CONFIG_FILE).read_text())["version"] == 2
+
+
+def test_v2_explicit_mock_is_kept(tmp_path):
+    project = make_project(tmp_path)
+    project.providers.llm.provider = "mock"
+    project.save()
+    assert Project.load(tmp_path).providers.llm.provider == "mock"
 
 
 def test_helpers():

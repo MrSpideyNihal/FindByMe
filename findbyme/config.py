@@ -151,7 +151,7 @@ class RenderConfig(BaseModel):
 
 
 class Project(BaseModel):
-    version: int = 1
+    version: int = 2
     language: str = "en"
     characters: list[Character]
     providers: Providers
@@ -193,8 +193,11 @@ class Project(BaseModel):
     def load(cls, root: str | Path | None = None) -> Project:
         root = find_root(Path(root) if root else Path.cwd())
         data = yaml.safe_load((root / CONFIG_FILE).read_text(encoding="utf-8")) or {}
+        migrated = _migrate(data)
         project = cls.model_validate(data)
         project._root = root
+        if migrated:
+            project.save()
         return project
 
     def save(self) -> Path:
@@ -202,6 +205,19 @@ class Project(BaseModel):
         data = self.model_dump(mode="json", exclude_none=True)
         target.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True), "utf-8")
         return target
+
+
+def _migrate(data: dict[str, Any]) -> bool:
+    """Version 1 wrote ``mock`` for every stage when setup ran without keys, which then
+    never changed after keys were added. Those projects move to ``auto``."""
+    if data.get("version", 1) >= 2:
+        return False
+    providers = data.get("providers") or {}
+    if all((providers.get(k) or {}).get("provider") == "mock" for k in providers) and providers:
+        for entry in providers.values():
+            entry["provider"] = AUTO
+    data["version"] = 2
+    return True
 
 
 def find_root(start: Path) -> Path:
@@ -214,52 +230,91 @@ def find_root(start: Path) -> Path:
     )
 
 
+AUTO = "auto"
+OFFLINE_ENV = "FINDBYME_OFFLINE"
+PROVIDER_KEYS = (
+    "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY", "OPENROUTER_API_KEY",
+    "ELEVENLABS_API_KEY", "FAL_KEY", "REPLICATE_API_TOKEN",
+)
+
+
 def default_providers(env: dict[str, str] | None = None) -> Providers:
-    """Pick providers from whichever API keys are present; fall back to offline mocks."""
-    env = dict(os.environ) if env is None else env
-    has = {key: bool(env.get(key)) for key in (
-        "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY", "ELEVENLABS_API_KEY",
-        "FAL_KEY", "REPLICATE_API_TOKEN",
-    )}
-
-    if has["ANTHROPIC_API_KEY"]:
-        llm = ProviderConfig(provider="anthropic", model="claude-sonnet-5-5")
-    elif has["OPENAI_API_KEY"]:
-        llm = ProviderConfig(provider="openai", model="gpt-4.1")
-    elif has["GEMINI_API_KEY"]:
-        llm = ProviderConfig(provider="gemini", model="gemini-2.5-flash")
-    else:
-        llm = ProviderConfig(provider="mock")
-
-    if has["ELEVENLABS_API_KEY"]:
-        tts = ProviderConfig(provider="elevenlabs", model="eleven_multilingual_v2")
-    elif has["OPENAI_API_KEY"]:
-        tts = ProviderConfig(provider="openai", model="gpt-4o-mini-tts")
-    else:
-        tts = ProviderConfig(provider="mock")
-
-    stt = (
-        ProviderConfig(provider="openai", model="whisper-1")
-        if has["OPENAI_API_KEY"]
-        else ProviderConfig(provider="mock")
+    """New projects use ``auto`` everywhere: the provider is picked from the keys present
+    when a video is made, so adding a key to ``.env`` later just works."""
+    del env
+    return Providers(
+        llm=ProviderConfig(provider=AUTO),
+        tts=ProviderConfig(provider=AUTO),
+        stt=ProviderConfig(provider=AUTO),
+        video=ProviderConfig(provider=AUTO),
     )
 
-    if has["FAL_KEY"]:
-        video = ProviderConfig(
-            provider="fal",
-            model="fal-ai/bytedance/omnihuman",
-            options={
-                "inputs": {"image_url": "{image}", "audio_url": "{audio}"},
-                "output": "video.url",
-            },
-        )
-    elif has["REPLICATE_API_TOKEN"]:
-        video = ProviderConfig(
-            provider="replicate",
-            model="bytedance/omni-human",
-            options={"inputs": {"image": "{image}", "audio": "{audio}"}, "output": ""},
-        )
-    else:
-        video = ProviderConfig(provider="mock")
 
-    return Providers(llm=llm, tts=tts, stt=stt, video=video)
+def _edge_available() -> bool:
+    try:
+        import edge_tts  # noqa: F401
+    except ImportError:
+        return False
+    return True
+
+
+def detect(kind: str, env: dict[str, str] | None = None) -> ProviderConfig:
+    """The best provider for one stage given the API keys in ``env``.
+
+    Falls back to offline mocks, except for voice, which uses free Edge voices when no
+    voice key is set. ``FINDBYME_OFFLINE=1`` forces mocks everywhere (tests, demos).
+    """
+    env = dict(os.environ) if env is None else env
+    if env.get(OFFLINE_ENV):
+        return ProviderConfig(provider="mock")
+    has = {key: bool(env.get(key, "").strip()) for key in PROVIDER_KEYS}
+
+    if kind == "llm":
+        if has["ANTHROPIC_API_KEY"]:
+            return ProviderConfig(provider="anthropic", model="claude-sonnet-5-5")
+        if has["OPENAI_API_KEY"]:
+            return ProviderConfig(provider="openai", model="gpt-4.1")
+        if has["GEMINI_API_KEY"]:
+            return ProviderConfig(provider="gemini", model="gemini-2.5-flash")
+        if has["OPENROUTER_API_KEY"]:
+            return ProviderConfig(provider="openrouter", model="openai/gpt-4.1")
+    elif kind == "tts":
+        if has["ELEVENLABS_API_KEY"]:
+            return ProviderConfig(provider="elevenlabs", model="eleven_multilingual_v2")
+        if has["OPENAI_API_KEY"]:
+            return ProviderConfig(provider="openai", model="gpt-4o-mini-tts")
+        if _edge_available():
+            return ProviderConfig(provider="edge")
+    elif kind == "stt":
+        if has["OPENAI_API_KEY"]:
+            return ProviderConfig(provider="openai", model="whisper-1")
+    elif kind == "video":
+        if has["FAL_KEY"]:
+            return ProviderConfig(
+                provider="fal",
+                model="fal-ai/bytedance/omnihuman",
+                options={
+                    "inputs": {"image_url": "{image}", "audio_url": "{audio}"},
+                    "output": "video.url",
+                },
+            )
+        if has["REPLICATE_API_TOKEN"]:
+            return ProviderConfig(
+                provider="replicate",
+                model="bytedance/omni-human",
+                options={"inputs": {"image": "{image}", "audio": "{audio}"}, "output": ""},
+            )
+    return ProviderConfig(provider="mock")
+
+
+def resolve(kind: str, cfg: ProviderConfig, env: dict[str, str] | None = None) -> ProviderConfig:
+    """Turn an ``auto`` entry into a concrete one; a model or options set alongside
+    ``auto`` still apply on top of the detected provider."""
+    if cfg.provider != AUTO:
+        return cfg
+    found = detect(kind, env)
+    return ProviderConfig(
+        provider=found.provider,
+        model=cfg.model or found.model,
+        options={**found.options, **cfg.options},
+    )

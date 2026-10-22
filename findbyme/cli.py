@@ -16,7 +16,7 @@ from .config import ASPECTS, LANGUAGES, RUNS_DIR, Project, find_root
 from .pipeline import Pipeline, PipelineError
 from .pipeline import Progress as Step
 from .plan import Plan
-from .providers import ProviderError
+from .providers import ProviderError, Stack
 from .setup import (
     CastMember,
     SetupError,
@@ -35,6 +35,7 @@ app = typer.Typer(
 cast_app = typer.Typer(help="Show or change the cast.", no_args_is_help=False)
 app.add_typer(cast_app, name="cast")
 console = Console()
+BOM = chr(0xFEFF)
 
 
 @app.callback()
@@ -85,7 +86,12 @@ def init(
     directory: Path = typer.Argument(Path("."), help="Where to create the project."),
 ) -> None:
     """One-time setup: your characters, their voices and the language."""
-    count = typer.prompt("How many characters will be in your videos?", type=int, default=1)
+    answer = typer.prompt("How many characters will be in your videos?", default="1")
+    # PowerShell pipes start with a byte-order mark; strip it so "1" reads as 1.
+    answer = answer.lstrip(BOM).strip()
+    if not answer.isdigit():
+        _fail("enter a number of characters")
+    count = int(answer)
     if not 1 <= count <= 12:
         _fail("pick between 1 and 12 characters")
     cast = [_ask_member(i + 1) for i in range(count)]
@@ -175,7 +181,12 @@ def _print_doctor(project: Project) -> bool:
     table = Table("", "check", "detail", show_header=False, box=None)
     results = doctor.run(project)
     for check in results:
-        mark = "[green]ok[/green]" if check.ok else "[red]!![/red]"
+        if not check.ok:
+            mark = "[red]!![/red]"
+        elif check.warn:
+            mark = "[yellow]--[/yellow]"
+        else:
+            mark = "[green]ok[/green]"
         table.add_row(mark, check.name, check.detail)
     console.print(table)
     return all(c.ok for c in results)
@@ -221,6 +232,18 @@ def _progress() -> Progress:
     )
 
 
+def _warn_placeholders(stack: Stack) -> None:
+    missing = stack.placeholders()
+    if not missing:
+        return
+    lines = "\n".join(f"  {kind}: {what}" for kind, what in missing.items())
+    console.print(
+        f"[yellow]Some stages have no API key, so they use placeholders:[/yellow]\n{lines}\n"
+        "Add keys to .env in the project folder (see .env.example), then run "
+        "`findbyme doctor`.\n"
+    )
+
+
 def _resolve_run(project: Project, run: str) -> Path:
     runs = project.path(RUNS_DIR)
     if run == "latest":
@@ -260,8 +283,12 @@ def render(
     """Render a run folder's plan.json into final.mp4."""
     project = _project()
     run_dir = _resolve_run(project, run)
+    stack = Stack(project.providers)
+    _warn_placeholders(stack)
     with _progress() as progress:
-        pipeline = Pipeline(project, on_progress=_Bar(progress), use_cache=not no_cache)
+        pipeline = Pipeline(
+            project, stack=stack, on_progress=_Bar(progress), use_cache=not no_cache
+        )
         try:
             final = pipeline.render(run_dir)
         except (PipelineError, ProviderError, ValueError) as exc:

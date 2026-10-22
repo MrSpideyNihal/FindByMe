@@ -11,11 +11,11 @@ import importlib
 from collections.abc import Callable
 from typing import Any
 
-from ..config import ProviderConfig, Providers
+from ..config import ProviderConfig, Providers, resolve
 from .base import LLM, STT, TTS, AnimateRequest, ProviderError, VideoGen, Word
 from .llm import OPENAI_COMPATIBLE, AnthropicLLM, MockLLM, OpenAICompatibleLLM
 from .stt import MockSTT, OpenAIWhisper
-from .tts import ElevenLabsTTS, MockTTS, OpenAITTS
+from .tts import EdgeTTS, ElevenLabsTTS, MockTTS, OpenAITTS
 from .video import FalVideo, MockVideo, ReplicateVideo
 
 __all__ = [
@@ -35,6 +35,7 @@ BUILTIN: dict[str, dict[str, Factory]] = {
     "tts": {
         "openai": OpenAITTS,
         "elevenlabs": ElevenLabsTTS,
+        "edge": EdgeTTS,
         "mock": MockTTS,
     },
     "stt": {
@@ -50,6 +51,7 @@ BUILTIN: dict[str, dict[str, Factory]] = {
 
 
 def build(kind: str, cfg: ProviderConfig) -> Any:
+    cfg = resolve(kind, cfg)
     if ":" in cfg.provider:
         module_name, _, attr = cfg.provider.partition(":")
         try:
@@ -69,14 +71,34 @@ def build(kind: str, cfg: ProviderConfig) -> Any:
     return factory(cfg.model, dict(cfg.options))
 
 
+# What each stage looks like when it falls back to the offline mock.
+PLACEHOLDER = {
+    "llm": "the script is a fixed template, not written about your topic",
+    "tts": "the voice is a beep",
+    "stt": "caption timing is estimated",
+    "video": "characters do not move; the reference image slowly pans",
+}
+
+
 class Stack:
     """The four providers a render uses, built once per run."""
 
     def __init__(self, providers: Providers):
+        self.resolved = {
+            kind: resolve(kind, getattr(providers, kind)) for kind in ("llm", "tts", "stt", "video")
+        }
         self.llm: LLM = build("llm", providers.llm)
         self.tts: TTS = build("tts", providers.tts)
         self.stt: STT = build("stt", providers.stt)
         self.video: VideoGen = build("video", providers.video)
+
+    def placeholders(self) -> dict[str, str]:
+        """Stages running on mocks, with what that means for the video."""
+        found = {k: PLACEHOLDER[k] for k, cfg in self.resolved.items() if cfg.provider == "mock"}
+        # Edge voices report their own word timings, so a mock stt costs nothing then.
+        if self.resolved["tts"].provider == "edge":
+            found.pop("stt", None)
+        return found
 
     def describe(self) -> dict[str, str]:
         return {

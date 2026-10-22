@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
+import json
 from pathlib import Path
 from typing import Any
 
 from .. import media
-from .base import make_identity
+from ..config import DEFAULT_TTS_VOICES
+from .base import ProviderError, make_identity
 from .http import api_key, request
 
 
@@ -85,3 +88,98 @@ class MockTTS:
             "-ar", "48000", "-ac", "1", out,
         )
         return out
+
+
+# Free Microsoft Edge neural voices: (female, male) per language. No key needed.
+EDGE_VOICES: dict[str, tuple[str, ...]] = {
+    "en": (
+        "en-US-AriaNeural", "en-US-GuyNeural", "en-US-JennyNeural", "en-US-ChristopherNeural",
+    ),
+    "hi": ("hi-IN-SwaraNeural", "hi-IN-MadhurNeural"),
+    "hinglish": ("hi-IN-SwaraNeural", "hi-IN-MadhurNeural"),
+    "mr": ("mr-IN-AarohiNeural", "mr-IN-ManoharNeural"),
+    "bn": ("bn-IN-TanishaaNeural", "bn-IN-BashkarNeural"),
+    "ta": ("ta-IN-PallaviNeural", "ta-IN-ValluvarNeural"),
+    "te": ("te-IN-ShrutiNeural", "te-IN-MohanNeural"),
+    "gu": ("gu-IN-DhwaniNeural", "gu-IN-NiranjanNeural"),
+    "ur": ("ur-IN-GulNeural", "ur-IN-SalmanNeural"),
+    "es": ("es-ES-ElviraNeural", "es-MX-JorgeNeural"),
+    "pt": ("pt-BR-FranciscaNeural", "pt-BR-AntonioNeural"),
+    "fr": ("fr-FR-DeniseNeural", "fr-FR-HenriNeural"),
+    "de": ("de-DE-KatjaNeural", "de-DE-ConradNeural"),
+    "it": ("it-IT-ElsaNeural", "it-IT-DiegoNeural"),
+    "ja": ("ja-JP-NanamiNeural", "ja-JP-KeitaNeural"),
+    "ko": ("ko-KR-SunHiNeural", "ko-KR-InJoonNeural"),
+    "zh": ("zh-CN-XiaoxiaoNeural", "zh-CN-YunxiNeural"),
+    "ar": ("ar-SA-ZariyahNeural", "ar-SA-HamedNeural"),
+    "ru": ("ru-RU-SvetlanaNeural", "ru-RU-DmitryNeural"),
+    "id": ("id-ID-GadisNeural", "id-ID-ArdiNeural"),
+    "tr": ("tr-TR-EmelNeural", "tr-TR-AhmetNeural"),
+}
+
+
+def edge_voice(voice: str, language: str) -> str:
+    """Use ``voice`` if it is already an Edge voice; otherwise map the character's default
+    voice slot to a voice for the language, so two characters never share a voice."""
+    if voice.endswith("Neural"):
+        return voice
+    pool = EDGE_VOICES.get(language, EDGE_VOICES["en"])
+    if voice in DEFAULT_TTS_VOICES:
+        slot = DEFAULT_TTS_VOICES.index(voice)
+    else:
+        slot = sum(map(ord, voice))
+    return pool[slot % len(pool)]
+
+
+def words_sidecar(audio: Path) -> Path:
+    """Where a TTS provider that knows its own word timings writes them."""
+    return audio.with_name(audio.name + ".words.json")
+
+
+class EdgeTTS:
+    """Free neural voices from Microsoft Edge's read-aloud service, with word timings.
+
+    Set a character's ``tts_voice`` to any Edge voice name (``edge-tts --list-voices``)
+    to choose one; otherwise a voice is picked for the project language.
+    """
+
+    def __init__(self, model: str = "", options: dict[str, Any] | None = None):
+        options = options or {}
+        self.rate = options.get("rate", "+0%")
+        self.identity = make_identity("edge", model, options)
+
+    def synthesize(
+        self, text: str, *, voice: str, instructions: str, language: str, out: Path
+    ) -> Path:
+        try:
+            import edge_tts
+        except ImportError as exc:
+            raise ProviderError("edge voice needs edge-tts: pip install edge-tts") from exc
+
+        name = edge_voice(voice, language)
+        mp3 = out.with_suffix(".mp3")
+
+        async def run() -> list[dict[str, float | str]]:
+            words: list[dict[str, float | str]] = []
+            stream = edge_tts.Communicate(text, name, rate=self.rate, boundary="WordBoundary")
+            with mp3.open("wb") as fh:
+                async for chunk in stream.stream():
+                    if chunk["type"] == "audio":
+                        fh.write(chunk["data"])
+                    elif chunk["type"] == "WordBoundary":
+                        start = chunk["offset"] / 1e7
+                        words.append({
+                            "text": chunk["text"],
+                            "start": round(start, 3),
+                            "end": round(start + chunk["duration"] / 1e7, 3),
+                        })
+            return words
+
+        try:
+            words = asyncio.run(run())
+        except Exception as exc:  # noqa: BLE001 - network and service errors vary by version
+            raise ProviderError(f"edge voice {name} failed: {exc}") from exc
+        if not mp3.exists() or mp3.stat().st_size == 0:
+            raise ProviderError(f"edge voice {name} returned no audio")
+        words_sidecar(mp3).write_text(json.dumps(words, ensure_ascii=False), encoding="utf-8")
+        return mp3
