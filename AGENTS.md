@@ -12,7 +12,10 @@ commands by hand.
 1. In the project folder (the one with `findbyme.yaml`), run `findbyme doctor`. Fix what
    it reports or tell the user which key is missing.
 2. Write the script: `findbyme script "<topic>" --style <style> [--notes "..."]`.
-   Use `findbyme styles` to see the options.
+   Use `findbyme styles` to see the options. Without a script key (`llm: auto: manual`),
+   use `findbyme brief` instead, write the JSON from `runs/<run>/brief.md` yourself into
+   `runs/<run>/plan.json`, and check it with `findbyme plan <run>`. Each project's own
+   `AGENTS.md` (written by setup) has the detailed steps.
 3. Show the user the script (`runs/<run>/plan.json`). Wait for approval. If they want
    changes, edit `plan.json` directly: keep the schema, keep `speaker` values to ids
    from `findbyme cast`, give every line a concrete `action`.

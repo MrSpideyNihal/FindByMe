@@ -195,12 +195,46 @@ $("#script-form").addEventListener("submit", async (event) => {
   }));
   if (!result) return;
   notify("");
+  if (result.plan) openPlan(result.run, result.plan);
+  else openBrief(result.run, result.brief);
+});
+
+function openBrief(run, brief) {
+  app.run = run;
+  $("#brief-run").textContent = run;
+  $("#brief-text").value = brief;
+  $("#brief-reply").value = "";
+  $("#brief").hidden = false;
+  for (const id of ["#editor", "#job", "#result"]) $(id).hidden = true;
+  $("#brief").scrollIntoView({ behavior: "smooth" });
+}
+
+$("#brief-copy").addEventListener("click", async (event) => {
+  const button = event.currentTarget;
+  try {
+    await navigator.clipboard.writeText($("#brief-text").value);
+    button.textContent = "Copied";
+  } catch {
+    // Clipboard access can be blocked; selecting the text lets the user copy it by hand.
+    $("#brief-text").select();
+    button.textContent = "Press Ctrl+C to copy";
+  }
+  setTimeout(() => { button.textContent = "Copy prompt"; }, 2000);
+});
+
+$("#brief-use").addEventListener("click", async (event) => {
+  const result = await busy(event.currentTarget, "Checking...", () => api(
+    `/api/runs/${app.run}/reply`, { method: "POST", json: { text: $("#brief-reply").value } },
+  ));
+  if (!result) return;
+  notify("");
   openPlan(result.run, result.plan);
 });
 
 function openPlan(run, plan, finished = null) {
   app.run = run;
   app.plan = plan;
+  $("#brief").hidden = true;
   $("#plan-title").textContent = plan.title;
   $("#plan-run").textContent = run;
   $("#editor").hidden = false;
@@ -332,13 +366,15 @@ async function loadLibrary() {
     onclick: async () => {
       const detail = await api(`/api/runs/${run.name}`);
       show("create");
-      openPlan(run.name, detail.plan, detail.video ? detail : null);
+      if (detail.plan) openPlan(run.name, detail.plan, detail.video ? detail : null);
+      else openBrief(run.name, detail.brief);
     },
   },
   run.cover ? h("img", { src: run.cover, alt: "" }) : h("div", { class: "preview" }, "Not rendered"),
   h("div", { class: "run-body" },
     h("div", { class: "run-title" }, run.title),
-    h("div", { class: "run-meta" }, `${run.style} - ${run.lines} lines`)))));
+    h("div", { class: "run-meta" },
+      run.needs_script ? `${run.style} - waiting for a script` : `${run.style} - ${run.lines} lines`)))));
 }
 
 /* ---------- cast ---------- */
@@ -449,6 +485,16 @@ function renderSettings() {
     settingField("render.music", "Background music file", r.music || ""),
   );
 }
+
+$("#reset-btn").addEventListener("click", async (event) => {
+  if (!window.confirm("Remove the whole cast and all settings and set up again? Finished videos are kept.")) return;
+  const data = await busy(event.currentTarget, "Clearing...", () => api("/api/reset", { method: "POST" }));
+  if (!data) return;
+  $("#setup-cast").replaceChildren();
+  $("#setup-count").value = 1;
+  await refresh();
+  notify("Cleared. Set up your cast.");
+});
 
 for (const tab of document.querySelectorAll(".tab")) {
   tab.addEventListener("click", () => show(tab.dataset.view));

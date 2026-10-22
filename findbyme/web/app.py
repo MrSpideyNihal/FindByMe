@@ -19,9 +19,10 @@ from pydantic import BaseModel, ValidationError
 
 from .. import __version__, doctor, styles
 from ..config import ASPECTS, CAST_DIR, CONFIG_FILE, LANGUAGES, RUNS_DIR, Project
-from ..pipeline import Pipeline, PipelineError
+from ..pipeline import BRIEF_FILE, Pipeline, PipelineError
 from ..pipeline import Progress as Step
-from ..plan import Plan
+from ..pipeline.runner import BRIEF_META
+from ..plan import PLAN_FILE, Plan
 from ..providers import ProviderError
 from ..setup import (
     CastMember,
@@ -29,6 +30,7 @@ from ..setup import (
     add_character,
     create_project,
     remove_character,
+    reset_project,
     set_option,
 )
 
@@ -40,6 +42,10 @@ class ScriptRequest(BaseModel):
     style: str = "explainer"
     notes: str = ""
     seconds: int | None = None
+
+
+class ReplyRequest(BaseModel):
+    text: str
 
 
 class SettingRequest(BaseModel):
@@ -79,20 +85,27 @@ def create_app(root: Path) -> FastAPI:
 
     def run_dir(name: str) -> Path:
         path = (root / RUNS_DIR / name).resolve()
-        if path.parent != (root / RUNS_DIR).resolve() or not (path / "plan.json").exists():
+        is_run = (path / PLAN_FILE).exists() or (path / BRIEF_FILE).exists()
+        if path.parent != (root / RUNS_DIR).resolve() or not is_run:
             raise HTTPException(404, f"no run named {name!r}")
         return path
 
     def summary(path: Path) -> dict[str, Any]:
-        plan = Plan.load(path)
         base = f"/files/{RUNS_DIR}/{path.name}"
         final = path / "final.mp4"
         manifest = path / "run.json"
+        if (path / PLAN_FILE).exists():
+            plan = Plan.load(path)
+            title, style, lines = plan.title, plan.style, len(plan.lines)
+        else:
+            meta = json.loads((path / BRIEF_META).read_text("utf-8"))
+            title, style, lines = meta["topic"], meta["style"], 0
         return {
             "name": path.name,
-            "title": plan.title,
-            "style": plan.style,
-            "lines": len(plan.lines),
+            "title": title,
+            "style": style,
+            "lines": lines,
+            "needs_script": lines == 0,
             "video": f"{base}/final.mp4" if final.exists() else None,
             "cover": f"{base}/cover.jpg" if (path / "cover.jpg").exists() else None,
             "frames": f"{base}/frames.jpg" if (path / "frames.jpg").exists() else None,
@@ -205,8 +218,13 @@ def create_app(root: Path) -> FastAPI:
     @app.get("/api/runs")
     def runs() -> list[dict[str, Any]]:
         folder = root / RUNS_DIR
-        paths = sorted(folder.glob("*/plan.json"), reverse=True) if folder.exists() else []
-        return [summary(p.parent) for p in paths]
+        if not folder.exists():
+            return []
+        paths = sorted(
+            (p for p in folder.iterdir() if (p / PLAN_FILE).exists() or (p / BRIEF_FILE).exists()),
+            reverse=True,
+        )
+        return [summary(p) for p in paths]
 
     @app.post("/api/script")
     def script(body: ScriptRequest) -> dict[str, Any]:
@@ -218,11 +236,32 @@ def create_app(root: Path) -> FastAPI:
             )
         except (ProviderError, KeyError) as exc:
             raise HTTPException(400, str(exc)) from exc
+        if plan is None:
+            # No script model: the UI shows the brief for the user or their agent.
+            return {"run": path.name, "plan": None, "brief": (path / BRIEF_FILE).read_text("utf-8")}
         return {"run": path.name, "plan": plan.model_dump()}
+
+    @app.post("/api/runs/{name}/reply")
+    def script_reply(name: str, body: ReplyRequest) -> dict[str, Any]:
+        """A script written from the brief, pasted back from any assistant."""
+        path = run_dir(name)
+        try:
+            plan = Pipeline(project()).accept(path, body.text)
+        except (ValidationError, ValueError) as exc:
+            raise HTTPException(400, f"That reply is not a valid script yet: {exc}") from exc
+        return {"run": name, "plan": plan.model_dump()}
+
+    @app.post("/api/reset")
+    def reset() -> dict[str, Any]:
+        project()
+        reset_project(root)
+        return state()
 
     @app.get("/api/runs/{name}")
     def run_detail(name: str) -> dict[str, Any]:
         path = run_dir(name)
+        if not (path / PLAN_FILE).exists():
+            return {**summary(path), "plan": None, "brief": (path / BRIEF_FILE).read_text("utf-8")}
         return {**summary(path), "plan": Plan.load(path).model_dump()}
 
     @app.put("/api/runs/{name}/plan")

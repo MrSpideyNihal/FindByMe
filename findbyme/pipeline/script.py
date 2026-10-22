@@ -80,6 +80,27 @@ def extract_json(raw: str) -> dict:
     return json.loads(text[start : end + 1])
 
 
+def brief_document(
+    project: Project, style: Style, topic: str, notes: str = "", seconds: int | None = None
+) -> str:
+    """Everything a writer needs, as one self-contained prompt: paste it into any chat
+    assistant, or let a coding agent read it, and the reply is the script."""
+    return (
+        f"{SYSTEM}\n"
+        f"{build_prompt(project, style, topic, notes, seconds)}\n\n"
+        "Reply with the JSON object only.\n"
+    )
+
+
+def parse_reply(project: Project, style_name: str, topic: str, raw: str) -> Plan:
+    """Validate a script reply from any source: a model, an agent or a person."""
+    data = extract_json(raw)
+    data.update(topic=topic, style=style_name, language=project.language)
+    plan = Plan.model_validate(data)
+    plan.check_cast(project)
+    return plan
+
+
 def write_script(
     project: Project,
     llm: LLM,
@@ -94,11 +115,7 @@ def write_script(
     for _ in range(attempts):
         raw = llm.complete(SYSTEM, prompt + feedback, json_mode=True)
         try:
-            data = extract_json(raw)
-            data.update(topic=topic, style=style.name, language=project.language)
-            plan = Plan.model_validate(data)
-            plan.check_cast(project)
-            return plan
+            return parse_reply(project, style.name, topic, raw)
         except (ValueError, ValidationError) as exc:
             # Tell the model exactly what was wrong; most models fix it on the next try.
             feedback = (

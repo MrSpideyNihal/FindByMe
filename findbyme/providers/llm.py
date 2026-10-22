@@ -82,6 +82,24 @@ class AnthropicLLM:
         return "".join(block.get("text", "") for block in data.get("content", []))
 
 
+class ScriptNeeded(ProviderError):
+    """No script model is configured: a person or their AI agent writes the script."""
+
+
+class ManualLLM:
+    """Used when there is no script API key. Instead of a fake script, the pipeline saves
+    a brief that you, Claude Code, Antigravity or any chat assistant turns into the script.
+    """
+
+    identity = "manual"
+
+    def __init__(self, model: str = "", options: dict[str, Any] | None = None):
+        del model, options
+
+    def complete(self, system: str, prompt: str, *, json_mode: bool = False) -> str:
+        raise ScriptNeeded("no script model configured; write the script from the brief")
+
+
 _BRIEF_RE = re.compile(r"<brief>(.*?)</brief>", re.S)
 
 
